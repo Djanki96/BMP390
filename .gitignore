@@ -1,7 +1,4 @@
 /.devcontainer
 /.vscode
-/CMakeLists.txt
 /example_test.py
-/Makefile
-/README.md
-/sdkconfig.defaults
+/build
