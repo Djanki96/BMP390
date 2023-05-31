@@ -1,70 +1,70 @@
 #include <stdio.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "driver/i2c.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <driver/i2c.h>
 
-#define I2C_MASTER_NUM I2C_NUM_0
-#define I2C_MASTER_SCL_IO 22
-#define I2C_MASTER_SDA_IO 21
+#define I2C_MASTER_NUM    I2C_NUM_0
 #define I2C_MASTER_FREQ_HZ 100000
+#define I2C_MASTER_TX_BUF_DISABLE 0
+#define I2C_MASTER_RX_BUF_DISABLE 0
+#define I2C_MASTER_INTR_FLAG_NONE 0
 
-#define BMP390_SENSOR_ADDR 0x77
-#define BMP390_PRESSURE_MSB_REG 0x04
+#define I2C_SCL_PIN     22
+#define I2C_SDA_PIN     21
+#define BMP390_I2C_ADDR 0x77
 
-void i2c_master_init()
+#define BMP390_REG_DATA     0x04
+
+static const i2c_config_t i2c_config = {
+    .mode = I2C_MODE_MASTER,
+    .sda_io_num = I2C_SDA_PIN,
+    .scl_io_num = I2C_SCL_PIN,
+    .sda_pullup_en = GPIO_PULLUP_ENABLE,
+    .scl_pullup_en = GPIO_PULLUP_ENABLE,
+    .master = {
+        .clk_speed = I2C_MASTER_FREQ_HZ,
+    },
+};
+
+static void i2c_master_init()
 {
-    i2c_config_t i2c_config = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = I2C_MASTER_SDA_IO,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_io_num = I2C_MASTER_SCL_IO,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = I2C_MASTER_FREQ_HZ,
-    };
     i2c_param_config(I2C_MASTER_NUM, &i2c_config);
-    i2c_driver_install(I2C_MASTER_NUM, i2c_config.mode, 0, 0, 0);
+    i2c_driver_install(I2C_MASTER_NUM, i2c_config.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, I2C_MASTER_INTR_FLAG_NONE);
 }
 
-void bmp390_read_pressure_data()
+static void bmp390_read_data()
 {
-    uint8_t data[3];
+    uint8_t data[6];
+    int16_t temperature;
+    uint32_t pressure;
+
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (BMP390_SENSOR_ADDR << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(cmd, BMP390_PRESSURE_MSB_REG, true);
-    i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
-    i2c_cmd_link_delete(cmd);
-    if (ret != ESP_OK) {
-        printf("Error: %d\n", ret);
-        return;
-    }
-
-    cmd = i2c_cmd_link_create();
+    i2c_master_write_byte(cmd, (BMP390_I2C_ADDR << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(cmd, BMP390_REG_DATA, true);
     i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (BMP390_SENSOR_ADDR << 1) | I2C_MASTER_READ, true);
-    for (int i = 0; i < 2; i++) {
-        i2c_master_read_byte(cmd, &data[i], I2C_MASTER_ACK);
-    }
-    i2c_master_read_byte(cmd, &data[2], I2C_MASTER_NACK);
+    i2c_master_write_byte(cmd, (BMP390_I2C_ADDR << 1) | I2C_MASTER_READ, true);
+    i2c_master_read(cmd, data, 6, I2C_MASTER_LAST_NACK);
     i2c_master_stop(cmd);
-    ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+    i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
     i2c_cmd_link_delete(cmd);
-    if (ret != ESP_OK) {
-        printf("Error: %d\n", ret);
-        return;
-    }
 
-    int32_t pressure_raw = (int32_t)(data[0] << 16 | data[1] << 8 | data[2]);
-    float pressure = (float)pressure_raw / 4096.0f;
-    printf("Pressure: %f hPa\n", pressure);
+    temperature = (int16_t)((data[3] << 8) | data[2]);
+    pressure = ((uint32_t)data[0] << 16) | ((uint32_t)data[1] << 8) | data[2];
+
+    // Verarbeite die Temperatur- und Druckwerte nach Bedarf
+    // ...
+
+    printf("Temperatur: %.2f °C\n", (float)temperature / 100.0);
+    printf("Druck: %.2f Pa\n", (float)pressure / 256.0);
 }
 
 void app_main()
 {
     i2c_master_init();
+
     while (1) {
-        bmp390_read_pressure_data();
-        vTaskDelay(1000 / portTICK_RATE_MS);
+        bmp390_read_data();
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
