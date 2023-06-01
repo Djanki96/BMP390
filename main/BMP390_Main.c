@@ -4,7 +4,7 @@
 #include <driver/i2c.h>
 
 #define I2C_MASTER_NUM    I2C_NUM_0
-#define I2C_MASTER_FREQ_HZ 400000
+#define I2C_MASTER_FREQ_HZ 100000
 #define I2C_MASTER_TX_BUF_DISABLE 0
 #define I2C_MASTER_RX_BUF_DISABLE 0
 #define I2C_MASTER_INTR_FLAG_NONE 0
@@ -41,6 +41,17 @@ static void bmp390_read_data()
 
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
+
+    //uint8_t data_send[2];
+
+    //data_send[0] = 0x04;
+    //data_send[1] = 0x05;
+
+    //i2c_master_write(cmd, &data_send, 2, false);
+    i2c_master_write_byte(cmd, (BMP390_I2C_ADDR << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(cmd, 0x1B, true);
+    i2c_master_write_byte(cmd, 0b00110011, true);
+    i2c_master_start(cmd);
     i2c_master_write_byte(cmd, (BMP390_I2C_ADDR << 1) | I2C_MASTER_WRITE, true);
     i2c_master_write_byte(cmd, BMP390_REG_PRESS_XLSB, true);
     i2c_master_start(cmd);
@@ -51,8 +62,14 @@ static void bmp390_read_data()
     i2c_cmd_link_delete(cmd);
 
     pressure = ((uint32_t)data[0] << 16) | ((uint32_t)data[1] << 8) | data[2];
+    
+    float pressure_scaled = pressure / 0.0066;
 
-    printf("Druck: %.2f Pa\n", (float)pressure / 256.0);
+    pressure = (pressure_scaled - 300) * (1250 - 300) + 300;
+
+    pressure = pressure / 10000;
+
+    printf("Druck: %.5f hPa\n", (float)pressure);
 }
 
 void app_main()
