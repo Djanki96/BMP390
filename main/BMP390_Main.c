@@ -62,12 +62,6 @@ static void bmp390_read_data()
     i2c_cmd_link_delete(cmd);
 
     pressure = ((uint32_t)data[0] << 16) | ((uint32_t)data[1] << 8) | data[2];
-    
-    float pressure_scaled = pressure / 0.0066;
-
-    pressure = (pressure_scaled - 300) * (1250 - 300) + 300;
-
-    pressure = pressure / 10000;
 
     printf("Druck: %.5f hPa\n", (float)pressure);
 }
